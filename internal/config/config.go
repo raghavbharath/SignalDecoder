@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	bugst "go.bug.st/serial"
-	"github.com/avr34/SignalDecoder/internal/logging"
+	"github.com/ragusauce4357/ECE692-Final-Project/SignalDecoder/internal/logging"
 )
 
 // For the constants, mapping protocol to a uint8.

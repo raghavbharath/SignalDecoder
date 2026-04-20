@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strconv"
 
-	"github.com/avr34/SignalDecoder/internal/logging"
+	"github.com/ragusauce4357/ECE692-Final-Project/SignalDecoder/internal/logging"
 )
 
 // TODO make sure they're not the same channels

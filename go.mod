@@ -1,4 +1,4 @@
-module github.com/avr34/SignalDecoder
+module github.com/ragusauce4357/ECE692-Final-Project/SignalDecoder
 
 go 1.26.2
 

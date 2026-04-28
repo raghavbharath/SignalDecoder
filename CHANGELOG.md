@@ -15,6 +15,27 @@ Put all SignalDecoder notes/changelog stuff here. Format adopted from [keepachan
 
 ## <older date/hash>
 ```
+## 78fd5ad
+- fixed the sequence tracking. Before it was tracking both the CAN and UART/SPI/I2C with the same sequence number, which caused dropped packet issues since seq numbers were being skipped CAN individually. Now added logic_seq and can_seq. 
+- Also fixed the sequence drop calculation overflow. B4 it was going from 255 -> 1 but saying the differnece is -255, but now it correctly says the difference and is 255 -> 0. No longer false drops. 
+- fixed the windows line endings in socat for WSL compatibility. 
+
+Here's the transmitted packets from /tmp/ttyV0 - Virtual COM Port 0
+[*] Sent CAN packet seq=0 id=0x123 (15 bytes)
+[*] Sent logic packet seq=1 (516 bytes)
+[*] Sent CAN packet seq=1 id=0x123 (15 bytes)
+[*] Sent logic packet seq=2 (516 bytes)
+[*] Sent CAN packet seq=2 id=0x123 (15 bytes)
+[*] Sent logic packet seq=3 (516 bytes)
+
+Here's the received packets from /tmp/ttyV1 - Virtual COM Port 1
+2026/04/27 22:18:22 [parseLogicPacket]: Logic packet seq=27
+2026/04/27 22:18:22 [parseCANPacket]: CAN packet seq=27 ID=0x123 DLC=8
+2026/04/27 22:18:22 [parseLogicPacket]: Logic packet seq=28
+2026/04/27 22:18:22 [parseCANPacket]: CAN packet seq=28 ID=0x123 DLC=8
+2026/04/27 22:18:22 [parseLogicPacket]: Logic packet seq=29
+2026/04/27 22:18:22 [parseCANPacket]: CAN packet seq=29 ID=0x123 DLC=8
+2026/04/27 22:18:22 [parseLogicPacket]: Logic packet seq=30
 
 ## d7c4dc7
 

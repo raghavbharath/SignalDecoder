@@ -3,7 +3,6 @@ package config
 import (
 	"errors"
 	"flag"
-	"fmt"
 	"log"
 	"slices"
 	"strings"
@@ -125,10 +124,10 @@ func GetConfig() (*Config, error) {
 	}
 
 	if len(ports) == 0 {
-		return nil, errors.New(logging.ErrLog(preamble) + "No serial port found")
+		log.Println(logging.StatLog(preamble) + "No serial ports found via enumeration, proceeding anyway.")
 	} else {
 		if exists := slices.Contains(ports, *port); !exists {
-			return nil, fmt.Errorf(logging.ErrLog(preamble)+"Port %s not found\n", *port)
+			log.Printf(logging.StatLog(preamble)+"Port %s not found in enumeration, proceeding anyway.\n", *port)
 		}
 	}
 

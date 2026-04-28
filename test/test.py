@@ -105,22 +105,21 @@ if __name__ == "__main__":
 
     # "Hello World!\0"
     message = b"Hello World!\x00"
-    seq_num = 0
+    logic_seq = 0
+    can_seq = 0
 
     try:
         while True:
-            # send a logic packet with UART samples
             samples = generate_uart_samples(message, tx_channel)
-            logic_pkt = create_logic_packet(samples, seq_num)
+            logic_pkt = create_logic_packet(samples, logic_seq)
             ser.write(logic_pkt)
-            print(f"[*] Sent logic packet seq={seq_num} ({len(logic_pkt)} bytes)")
-            seq_num += 1
+            print(f"[*] Sent logic packet seq={logic_seq} ({len(logic_pkt)} bytes)")
+            logic_seq = (logic_seq + 1) % 256
 
-            # send a CAN packet with fake data
-            can_pkt = create_can_packet(seq_num, can_id=0x123, data=bytes([0xCA, 0xFE, 0xBA, 0xBE, 0xDE, 0xAD, 0xBE, 0xEF]))
+            can_pkt = create_can_packet(can_seq, can_id=0x123, data=bytes([0xCA, 0xFE, 0xBA, 0xBE, 0xDE, 0xAD, 0xBE, 0xEF]))
             ser.write(can_pkt)
-            print(f"[*] Sent CAN packet seq={seq_num} id=0x123 ({len(can_pkt)} bytes)")
-            seq_num += 1
+            print(f"[*] Sent CAN packet seq={can_seq} id=0x123 ({len(can_pkt)} bytes)")
+            can_seq = (can_seq + 1) % 256
 
             time.sleep(0.05)
 

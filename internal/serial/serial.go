@@ -239,7 +239,7 @@ func Run(config *config.Config, tcpConnection net.Conn) error {
 					firstLogic = false
 				} else if packet.Seq != lastLogicSeq+1 {
 					log.Printf(logging.ErrLog(preamble)+"Logic: dropped %d packet(s) between seq %d and %d\n",
-						int(packet.Seq)-int(lastLogicSeq)-1, lastLogicSeq, packet.Seq)
+						int((int(packet.Seq)-int(lastLogicSeq)-1+256)%256), lastLogicSeq, packet.Seq)
 				}
 				lastLogicSeq = packet.Seq
 
@@ -259,7 +259,7 @@ func Run(config *config.Config, tcpConnection net.Conn) error {
 					firstCAN = false
 				} else if packet.Seq != lastCANSeq+1 {
 					log.Printf(logging.ErrLog(preamble)+"CAN: dropped %d packet(s) between seq %d and %d\n",
-						int(packet.Seq)-int(lastCANSeq)-1, lastCANSeq, packet.Seq)
+						int((int(packet.Seq)-int(lastCANSeq)-1+256)%256), lastCANSeq, packet.Seq)
 				}
 				lastCANSeq = packet.Seq
 

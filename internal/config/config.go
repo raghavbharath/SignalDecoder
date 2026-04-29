@@ -58,7 +58,8 @@ const (
 // to decode (if any), and if so, which channels to use.
 type Config struct {
 	Port     string
-	Duration float32
+	Duration float64
+	SampleRate uint
 	Protocol ProtocolType
 	Pins     ProtocolPins
 }
@@ -85,6 +86,7 @@ func GetConfig() (*Config, error) {
 	port := flag.String("port", "", "Port at which to read data from the Logic Analyzer.")
 	pins := flag.String("pins", "", "(Optional) Channels to use to perform protocol decoding.")
 	duration := flag.Float64("duration", float64(0x0), "Duration (in ms) to run signal capture.")
+	sampleRate := flag.Uint("sr", 0, "Sample rate (number of samples per second). Must be provided.")
 	protocol := flag.String("protocol", "", "(Optional) Protocol to decode.")
 	list := flag.Bool("list", false, "List available ports")
 
@@ -104,10 +106,16 @@ func GetConfig() (*Config, error) {
 		ret.Port = *port
 	}
 
+	if *sampleRate == 0 {
+		return nil, errors.New(logging.ErrLog(preamble) + "Must specify the logic analyzer's sample rate, as an integer.")
+	} else {
+		ret.SampleRate = *sampleRate
+	}
+
 	if *duration <= 0.0 {
 		return nil, errors.New(logging.ErrLog(preamble) + "Must specify a (positive) duration.")
 	} else {
-		ret.Duration = float32(*duration)
+		ret.Duration = float64(*duration)
 	}
 
 	// why doesn't this language have logical xor!
@@ -216,10 +224,11 @@ func (a *Config) Print() {
 	preamble := "[print] "
 
 	log.Printf(logging.StatLog(preamble) + "Current configuration:\n")
-	log.Printf(logging.StatLog(preamble)+"  Port:     %s\n", a.Port)
-	log.Printf(logging.StatLog(preamble)+"  Duration: %f\n", a.Duration)
-	log.Printf(logging.StatLog(preamble)+"  Protocol: %d\n", a.Protocol)
-	log.Printf(logging.StatLog(preamble)+"  Pins:     0x%X\n", a.Pins)
+	log.Printf(logging.StatLog(preamble)+"  Port:        %s\n", a.Port)
+	log.Printf(logging.StatLog(preamble)+"  Duration:    %f\n", a.Duration)
+	log.Printf(logging.StatLog(preamble)+"  Sample Rate: 0x%X\n", a.SampleRate)
+	log.Printf(logging.StatLog(preamble)+"  Protocol:    %d\n", a.Protocol)
+	log.Printf(logging.StatLog(preamble)+"  Pins:        0x%X\n", a.Pins)
 }
 
 func printPorts() {

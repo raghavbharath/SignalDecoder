@@ -6,10 +6,10 @@ import (
 	"net" //built in net package for TCP we'll use later
 	"time"
 
-	bugst "go.bug.st/serial"
-
 	"github.com/ragusauce4357/ECE692-Final-Project/SignalDecoder/internal/config"
+	"github.com/ragusauce4357/ECE692-Final-Project/SignalDecoder/internal/decoder"
 	"github.com/ragusauce4357/ECE692-Final-Project/SignalDecoder/internal/logging"
+	bugst "go.bug.st/serial"
 )
 
 const (
@@ -51,7 +51,7 @@ type Packet struct {
 
 // Reads com port specified in Config struct for 128 bytes,
 // and forwards the data along a go-channel called packetChan.
-func ReadByteStream(config *config.Config, rawChan chan<- []byte, errorChan chan<- error, done <-chan struct{}) {
+func ReadByteStream(cfg *config.Config, rawChan chan<- []byte, errorChan chan<- error, done <-chan struct{}) {
 	preamble := "[ReadByteStream]: "
 
 	// Configure the Port
@@ -62,9 +62,9 @@ func ReadByteStream(config *config.Config, rawChan chan<- []byte, errorChan chan
 		StopBits: bugst.OneStopBit,
 	}
 
-	port, err := bugst.Open(config.Port, mode)
+	port, err := bugst.Open(cfg.Port, mode)
 	if err != nil {
-		errorChan <- fmt.Errorf(logging.ErrLog(preamble)+"Failed to open port %s: %v", config.Port, err)
+		errorChan <- fmt.Errorf(logging.ErrLog(preamble)+"Failed to open port %s: %v", cfg.Port, err)
 		return
 	}
 	log.Println(logging.StatLog(preamble) + "Opened port.")
@@ -78,12 +78,12 @@ func ReadByteStream(config *config.Config, rawChan chan<- []byte, errorChan chan
 	if err := port.ResetInputBuffer(); err != nil {
 		log.Println(logging.ErrLog(preamble) + "Failed to reset input buffer, proceeding anyway.")
 	}
-	log.Printf(logging.StatLog(preamble)+"Started streaming from %s...", config.Port)
+	log.Printf(logging.StatLog(preamble)+"Started streaming from %s...", cfg.Port)
 
 	readBuf := make([]byte, 1024) //a large read buffer to capture 1024 bytes at a time
 	var pending []byte
 
-	//log.Printf(logging.StatLog(preamble)+"Started streaming from %s...", config.Port)
+	//log.Printf(logging.StatLog(preamble)+"Started streaming from %s...", cfg.Port)
 
 	for {
 		select {
@@ -197,23 +197,23 @@ func parseCANPacket(raw []byte) (*CANPacket, error) {
 //Start ReadByteStream as a Go Routine.
 // Consume the raw packets from rawChan, parses and validates them, route
 // the logic packets to protocol decoders and CAN packets to Python straight over TCP.
-// Stop it right after config.Duration (in ms)
+// Stop it right after cfg.Duration (in ms)
 
-func Run(config *config.Config, tcpConnection net.Conn) error {
+func Run(cfg *config.Config, tcpConnection net.Conn) error {
 	preamble := "[Run]: "
 
 	rawChan := make(chan []byte, 20)
 	errorChan := make(chan error, 20)
 	done := make(chan struct{})
 
-	go ReadByteStream(config, rawChan, errorChan, done)
+	go ReadByteStream(cfg, rawChan, errorChan, done)
 
-	timer := time.AfterFunc(time.Duration(config.Duration)*time.Millisecond, func() {
+	timer := time.AfterFunc(time.Duration(cfg.Duration)*time.Millisecond, func() {
 		close(done)
 	})
 	defer timer.Stop()
 
-	log.Printf(logging.StatLog(preamble)+"Running for %.0f ms\n", config.Duration)
+	log.Printf(logging.StatLog(preamble)+"Running for %.0f ms\n", cfg.Duration)
 
 	var lastLogicSeq uint8
 	var lastCANSeq uint8
@@ -246,7 +246,19 @@ func Run(config *config.Config, tcpConnection net.Conn) error {
 				//Still TODO: Call decoder based on config.Protocol
 				// like results := decoder.DecodeUART(packet.Samples[:], config.Pins)
 				// then send results to python over TCP
-				_ = packet
+				switch cfg.Protocol {
+				case config.SPI:
+					results := decoder.DecodeSPI(packet.Samples[:], cfg.Pins, 0)
+					for _, transfer := range results {
+						log.Printf(logging.StatLog(preamble)+"SPI transfer t=%.0fus MOSI=0x%02X MISO=0x%02X err=%v\n",
+							transfer.Timestamp, transfer.MOSI, transfer.MISO, transfer.Error)
+					}
+
+				case config.UART:
+					// TODO: decoder.DecodeUART(packet.Samples[:], config.Pins)
+				case config.I2C:
+					// TODO: decoder.DecodeI2C(packet.Samples[:], config.Pins)
+				}
 
 			case CAN_H1:
 				packet, err := parseCANPacket(raw)

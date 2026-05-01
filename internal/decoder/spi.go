@@ -53,8 +53,7 @@ func DecodeSPI(samples []byte, pins config.ProtocolPins, mode int) []DecodedSPIP
 	var counter int = 0
 	var misoStore byte
 	var mosiStore byte
-	//var timestamp float64
-	var transactionStart float64 = 0
+	var byteStart float64 = 0
 
 	//if no CS, treat it as always tied low or active
 	inTransaction := (csCH == 0)
@@ -70,11 +69,9 @@ func DecodeSPI(samples []byte, pins config.ProtocolPins, mode int) []DecodedSPIP
 			cs = (sample >> (csCH - 1)) & 1
 		}
 
-		//timestamp = float64(i) // gives the time in us since we sample at 1MHz
-
 		// if CS falling edge then it's transaction start
 		if prevCS == 1 && cs == 0 {
-			transactionStart = float64(i) //time in us at 1MHz
+			byteStart = float64(i)
 			inTransaction = true
 			counter, mosiStore, misoStore = 0, 0, 0
 		}
@@ -84,10 +81,10 @@ func DecodeSPI(samples []byte, pins config.ProtocolPins, mode int) []DecodedSPIP
 		if prevCS == 0 && cs == 1 {
 			if counter > 0 {
 				transfer := DecodedSPIPackets{
-					transactionStart,
+					byteStart,
 					mosiStore,
 					misoStore,
-					true,
+					counter < 8, //only an error if its a partial byte
 				}
 				results = append(results, transfer)
 			}
@@ -103,13 +100,14 @@ func DecodeSPI(samples []byte, pins config.ProtocolPins, mode int) []DecodedSPIP
 			// sample
 			if counter == 8 {
 				transfer := DecodedSPIPackets{
-					transactionStart,
+					byteStart,
 					mosiStore,
 					misoStore,
 					false,
 				}
 				results = append(results, transfer)
 				counter, misoStore, mosiStore = 0, 0, 0
+				byteStart = float64(i)
 			}
 			mosiStore = (mosiStore << 1) | mosi
 			misoStore = (misoStore << 1) | miso
@@ -122,8 +120,9 @@ func DecodeSPI(samples []byte, pins config.ProtocolPins, mode int) []DecodedSPIP
 
 	// if samples ran out mid-transaction
 	// like if we have leftover bytes that never got flushed
+	// debug statement - log.Printf("[DecodeSPI]: end of samples - inTransaction=%v counter=%d", inTransaction, counter)
 	if inTransaction && counter > 0 {
-		results = append(results, DecodedSPIPackets{transactionStart, mosiStore, misoStore, true})
+		results = append(results, DecodedSPIPackets{byteStart, mosiStore, misoStore, counter < 8})
 	}
 	return results
 

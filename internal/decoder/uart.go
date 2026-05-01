@@ -11,11 +11,11 @@ import (
 // The timestamp is the time in us, which in go can represent more seconds than
 // we could ever need.
 type UARTByte struct {
-	Data byte
+	Data      byte
 	Timestamp float64
 }
 
-// Struct for decoded uart packets. Stores one complete 516 byte packet 
+// Struct for decoded uart packets. Stores one complete 516 byte packet
 // of data.
 type DecodedUARTPacket struct {
 	TX []UARTByte
@@ -35,7 +35,7 @@ func DecodeUART(packet []byte, cfg *config.Config, baud uint) *DecodedUARTPacket
 	// Bit-shift right by 12 to get MSB of pins (TX).
 	// Bit-shift right by 8, and AND with 0xF to get 2nd MSB (RX)
 	txPin := uint8(cfg.Pins >> 12)
-	rxPin := uint8(cfg.Pins >> 8) & 0xF
+	rxPin := uint8(cfg.Pins>>8) & 0xF
 
 	// Initialize return object and local timestamp. This will effectively implement RLE,
 	// since as long as the TX and RX pins stay the same, the timestamp is incremented.
@@ -65,12 +65,17 @@ func DecodeUART(packet []byte, cfg *config.Config, baud uint) *DecodedUARTPacket
 
 	halfway := uint(samplesPerBit / 2)
 
+	//masks for tx and rx used to get the high/low of each line
+	txMask := uint8(1 << (txPin - 1))
+	rxMask := uint8(1 << (rxPin - 1))
+
 	// For loop to iterate through all the samples
 	for _, sample := range packet {
 		// Get high/low of each line
-		txHigh := (sample & txPin) != 0
-		rxHigh := (sample & rxPin) != 0
-		
+
+		txHigh := (sample & txMask) != 0
+		rxHigh := (sample & rxMask) != 0
+
 		// Switch case to handle the states, and extracting the bytes.
 		// In hindsight, could've probably wrapped this in a function, which
 		// could be applied to both TX and RX, but whatever.
@@ -119,7 +124,7 @@ func DecodeUART(packet []byte, cfg *config.Config, baud uint) *DecodedUARTPacket
 			// Save byte and timestamp
 			if txSampleCounter == 20 {
 				ret.TX = append(ret.TX, UARTByte{
-					Data: txCurrentByte,
+					Data:      txCurrentByte,
 					Timestamp: localTimestamp,
 				})
 				txSampleCounter = 0
@@ -176,7 +181,7 @@ func DecodeUART(packet []byte, cfg *config.Config, baud uint) *DecodedUARTPacket
 			// Save byte and timestamp
 			if rxSampleCounter == 20 {
 				ret.RX = append(ret.RX, UARTByte{
-					Data: rxCurrentByte,
+					Data:      rxCurrentByte,
 					Timestamp: localTimestamp,
 				})
 				rxSampleCounter = 0

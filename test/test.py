@@ -50,6 +50,62 @@ def generate_uart_samples(message: bytes, tx_channel: int) -> list[int]:
 
     return samples
 
+def generate_spi_samples(message:bytes, mosi_channel: int, miso_channel: int, clk_channel: int, cs_channel: int) -> list[int]:
+    """
+    Generates 512 raw samples for a SPI message.
+    Mode 0: CLK idles low, sample on rising edge. MSB first.
+    MISO mirrors MOSI for loopback testing.
+    ~164kHz SPI = ~6 samples per clock cycle at 1MHz sampling.
+    
+    """
+
+    SAMPLES_PER_HALF_CYCLE = 3
+    mosi_bit = mosi_channel - 1
+    miso_bit = miso_channel - 1
+    clk_bit = clk_channel - 1
+    cs_bit = cs_channel -1 
+
+    IDLE = (1 << cs_bit) # if CS high, then everything else low
+    samples = []
+
+    # idle before transaction
+    for _ in range(10):
+        samples.append(IDLE)
+
+    # if CS low then transaction starts
+    for byte in message:
+        for bit_index in range(7, -1, -1):  # MSB first
+            mosi_val = (byte >> bit_index) & 1
+            miso_val = mosi_val  # loopback
+
+            # CLK low phase
+            sample_low = (mosi_val << mosi_bit) | (miso_val << miso_bit)
+            for _ in range(SAMPLES_PER_HALF_CYCLE):
+                samples.append(sample_low)
+
+            # CLK high phase - decoder samples here
+            sample_high = sample_low | (1 << clk_bit)
+            for _ in range(SAMPLES_PER_HALF_CYCLE):
+                samples.append(sample_high)
+
+    # if CS high then transaction ends
+    for _ in range(10):
+        samples.append(IDLE)
+
+    samples = samples[:SAMPLE_COUNT]
+    while len(samples) < SAMPLE_COUNT:
+        samples.append(IDLE)
+    return samples
+
+def merge_samples(samples_list: list[list[int]]) -> list[int]:
+    """Merges multiple channel sample lists by ORing each position."""
+    merged = [0] * SAMPLE_COUNT
+    for samples in samples_list:
+        for i in range(SAMPLE_COUNT):
+            merged[i] |= samples[i]
+    return merged
+
+
 def create_logic_packet(samples: list[int], seq: int) -> bytes:
     """
     Builds a 516-byte logic packet:
@@ -93,8 +149,12 @@ def create_can_packet(seq: int, can_id: int, data: bytes) -> bytes:
     return packet + struct.pack('B', checksum)
 
 if __name__ == "__main__":
-    port_name = input('Enter the virtual port (e.g., COM5 or /dev/ttyUSB0): ')
-    tx_channel = int(input('Enter TX channel number (1-8): '))
+    port_name    = input('Enter the virtual port (e.g., /tmp/ttyV0): ')
+    tx_channel   = int(input('Enter UART TX channel (1-8): '))
+    mosi_channel = int(input('Enter SPI MOSI channel (1-8): '))
+    miso_channel = int(input('Enter SPI MISO channel (1-8): '))
+    clk_channel  = int(input('Enter SPI CLK channel (1-8): '))
+    cs_channel   = int(input('Enter SPI CS channel (1-8): '))
 
     try:
         ser = serial.Serial(port_name, baudrate=BAUD_RATE)
@@ -103,17 +163,20 @@ if __name__ == "__main__":
         print(f"[!] Error opening port: {e}")
         exit(1)
 
-    # "Hello World!\0"
-    message = b"Hello World!\x00"
+    uart_message = b"Hello World!\x00"
+    spi_message  = b"SPI Test"
     logic_seq = 0
-    can_seq = 0
+    can_seq   = 0
 
     try:
         while True:
-            samples = generate_uart_samples(message, tx_channel)
-            logic_pkt = create_logic_packet(samples, logic_seq)
+            uart_samples = generate_uart_samples(uart_message, tx_channel)
+            spi_samples  = generate_spi_samples(spi_message, mosi_channel, miso_channel, clk_channel, cs_channel)
+            merged = merge_samples([uart_samples, spi_samples])
+
+            logic_pkt = create_logic_packet(merged, logic_seq)
             ser.write(logic_pkt)
-            print(f"[*] Sent logic packet seq={logic_seq} ({len(logic_pkt)} bytes)")
+            print(f"[*] Sent logic packet seq={logic_seq} ({len(logic_pkt)} bytes) [UART+SPI]")
             logic_seq = (logic_seq + 1) % 256
 
             can_pkt = create_can_packet(can_seq, can_id=0x123, data=bytes([0xCA, 0xFE, 0xBA, 0xBE, 0xDE, 0xAD, 0xBE, 0xEF]))

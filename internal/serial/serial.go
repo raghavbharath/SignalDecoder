@@ -159,7 +159,7 @@ func parseLogicPacket(raw []byte) (*LogicPacket, error) {
 	preamble := "[parseLogicPacket]: "
 
 	//raw format: [0xAA][0xBB][seq][512 samples][checksum]
-	if !validateChecksum(raw[2:515], raw[515]) {
+	if !validateChecksum(raw[0:515], raw[515]) {
 		return nil, fmt.Errorf(logging.ErrLog(preamble) + "Checksum mismatch, dropping packet")
 	}
 
@@ -179,7 +179,7 @@ func parseCANPacket(raw []byte) (*CANPacket, error) {
 	// raw: [0xCC][0xDD][seq][CAN_IDH][CAN_IDL][DLC][0-8 data bytes][checksum]
 	dlc := raw[5]
 	dataEnd := 6 + int(dlc)
-	if !validateChecksum(raw[2:dataEnd], raw[dataEnd]) {
+	if !validateChecksum(raw[0:dataEnd], raw[dataEnd]) {
 		return nil, fmt.Errorf(logging.ErrLog(preamble) + "Checksum mismatch, dropping packet")
 	}
 	packet := &CANPacket{
@@ -257,7 +257,7 @@ func Run(cfg *config.Config, tcpConnection net.Conn) error {
 				case config.UART:
 					results := decoder.DecodeUART(packet.Samples[:], cfg)
 					for _, transfer := range results.TX {
-						log.Printf(logging.StatLog(preamble) + "UART transfer over tx: t=%.0fus TX=0x%02X",
+						log.Printf(logging.StatLog(preamble)+"UART transfer over tx: t=%.0fus TX=0x%02X",
 							transfer.Timestamp, transfer.Data)
 					}
 				case config.I2C:

@@ -261,7 +261,12 @@ func Run(cfg *config.Config, tcpConnection net.Conn) error {
 							transfer.Timestamp, transfer.Data)
 					}
 				case config.I2C:
-					// TODO: decoder.DecodeI2C(packet.Samples[:], config.Pins)
+					offset := float64(packet.Seq) * 512.0
+					results := decoder.DecodeI2C(packet.Samples[:], cfg.Pins, offset)
+					for _, transfer := range results {
+						log.Printf(logging.StatLog(preamble)+"I2C addr=0x%02X rw=%v data=%X acks=%v err=%v t=%.0fus\n",
+							transfer.Addr, transfer.RW, transfer.Data, transfer.ACKs, transfer.Error, transfer.Timestamp)
+					}
 				default:
 					log.Println("Protocol not found: " + string(cfg.Protocol))
 				}

@@ -89,15 +89,14 @@ func DecodeUART(packet []byte, cfg *config.Config) *DecodedUARTPacket {
 				txSampleCounter = 0
 			}
 		case START_BIT:
-			// As long as txSampleCounter is less than samplesPerBit, and TX doesn't become 1, do nothing
-			// If txSampleCounter exceeds samplesPerBit, or TX becomes 1, switch to DATA_BITS, and set
-			// txSampleCounter to 0.
-			if txSampleCounter >= samplesPerBit || txHigh {
+			if txHigh && txSampleCounter < halfway {
+				txState = IDLE
+			} else if txSampleCounter >= samplesPerBit {
 				txState = DATA_BITS
 				txSampleCounter = 0
 			}
-
 			txSampleCounter++
+
 		case DATA_BITS:
 			// Capture and shift in the value of TX if txSampleCounter == int(samplesPerBit / 2)
 			if txSampleCounter == halfway {
@@ -107,30 +106,23 @@ func DecodeUART(packet []byte, cfg *config.Config) *DecodedUARTPacket {
 				}
 				txByteCount++
 			}
-
-			// If we're at the end of a bit
-			if txSampleCounter == samplesPerBit {
-				txSampleCounter = 0
-			}
-
 			txSampleCounter++
 
-			// Change states if we've captured 8 bits
-			if txByteCount == 8 {
-				txState = STOP_BIT
-				txSampleCounter = 20
+			if txSampleCounter >= samplesPerBit {
+				txSampleCounter = 0
+				if txByteCount == 8 {
+					txState = STOP_BIT
+				}
 			}
 		case STOP_BIT:
-			// Save byte and timestamp
-			if txSampleCounter == 20 {
+			if txSampleCounter == halfway {
 				ret.TX = append(ret.TX, UARTByte{
 					Data:      txCurrentByte,
 					Timestamp: localTimestamp,
 				})
-				txSampleCounter = 0
 			}
-
-			if txHigh {
+			txSampleCounter++
+			if txSampleCounter >= samplesPerBit && txHigh {
 				txState = IDLE
 			}
 		}
@@ -146,17 +138,15 @@ func DecodeUART(packet []byte, cfg *config.Config) *DecodedUARTPacket {
 				rxSampleCounter = 0
 			}
 		case START_BIT:
-			// As long as rxSampleCounter is less than samplesPerBit, and RX doesn't become 1, do nothing
-			// If rxSampleCounter exceeds samplesPerBit, or RX becomes 1, switch to DATA_BITS, and set
-			// rxSampleCounter to 0.
-			if rxSampleCounter >= samplesPerBit || rxHigh {
+			if rxHigh && rxSampleCounter < halfway {
+				rxState = IDLE
+			} else if rxSampleCounter >= samplesPerBit {
 				rxState = DATA_BITS
 				rxSampleCounter = 0
 			}
-
 			rxSampleCounter++
+
 		case DATA_BITS:
-			// Capture and shift in the value of RX if rxSampleCounter == int(samplesPerBit / 2)
 			if rxSampleCounter == halfway {
 				rxCurrentByte >>= 1
 				if rxHigh {
@@ -164,30 +154,22 @@ func DecodeUART(packet []byte, cfg *config.Config) *DecodedUARTPacket {
 				}
 				rxByteCount++
 			}
-
-			// If we're at the end of a bit
-			if rxSampleCounter == samplesPerBit {
-				rxSampleCounter = 0
-			}
-
 			rxSampleCounter++
-
-			// Change states if we've captured 8 bits
-			if rxByteCount == 8 {
-				rxState = STOP_BIT
-				rxSampleCounter = 20
+			if rxSampleCounter >= samplesPerBit {
+				rxSampleCounter = 0
+				if rxByteCount == 8 {
+					rxState = STOP_BIT
+				}
 			}
 		case STOP_BIT:
-			// Save byte and timestamp
-			if rxSampleCounter == 20 {
+			if rxSampleCounter == halfway {
 				ret.RX = append(ret.RX, UARTByte{
 					Data:      rxCurrentByte,
 					Timestamp: localTimestamp,
 				})
-				rxSampleCounter = 0
 			}
-
-			if rxHigh {
+			rxSampleCounter++
+			if rxSampleCounter >= samplesPerBit && rxHigh {
 				rxState = IDLE
 			}
 		}

@@ -202,6 +202,7 @@ func parseCANPacket(raw []byte) (*CANPacket, error) {
 func Run(cfg *config.Config, tcpConnection net.Conn) error {
 	preamble := "[Run]: "
 
+	var logicPacketCount uint64 //this is to fix the timestamp issues when the seq number rolls over.
 	rawChan := make(chan []byte, 20)
 	errorChan := make(chan error, 20)
 	done := make(chan struct{})
@@ -255,10 +256,12 @@ func Run(cfg *config.Config, tcpConnection net.Conn) error {
 					}
 
 				case config.UART:
+					offset := float64(logicPacketCount) * 512.0 * (1.0 / float64(cfg.SampleRate)) * 1000000
+					logicPacketCount++
 					results := decoder.DecodeUART(packet.Samples[:], cfg)
 					for _, transfer := range results.TX {
-						log.Printf(logging.StatLog(preamble)+"UART transfer over tx: t=%.0fus TX=0x%02X",
-							transfer.Timestamp, transfer.Data)
+						log.Printf(logging.StatLog(preamble)+"UART transfer over tx: t=%.0fus TX=0x%02X\n",
+							transfer.Timestamp+offset, transfer.Data)
 					}
 				case config.I2C:
 					offset := float64(packet.Seq) * 512.0

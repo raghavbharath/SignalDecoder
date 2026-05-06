@@ -247,33 +247,47 @@ func Run(cfg *config.Config, tcpConnection net.Conn) error {
 				//Still TODO: Call decoder based on config.Protocol
 				// like results := decoder.DecodeUART(packet.Samples[:], config.Pins)
 				// then send results to python over TCP
+				// Always forward raw logic packet to Python for waveform display
+				tcpConnection.Write(raw) //sends the raw binary packet. Python alr parses this
+
+				offset := float64(logicPacketCount) * 512.0 * (1.0 / float64(cfg.SampleRate)) * 1000000
+				logicPacketCount++
+
 				switch cfg.Protocol {
 				case config.SPI:
 					results := decoder.DecodeSPI(packet.Samples[:], cfg.Pins, 0)
 					for _, transfer := range results {
 						log.Printf(logging.StatLog(preamble)+"SPI transfer t=%.0fus MOSI=0x%02X MISO=0x%02X err=%v\n",
 							transfer.Timestamp, transfer.MOSI, transfer.MISO, transfer.Error)
+						fmt.Fprintf(tcpConnection, "ANN UART t=%.0f ch=1 data=0x%02X\n",
+							transfer.Timestamp+offset, transfer.MOSI)
 					}
 
 				case config.UART:
-					offset := float64(logicPacketCount) * 512.0 * (1.0 / float64(cfg.SampleRate)) * 1000000
-					logicPacketCount++
 					results := decoder.DecodeUART(packet.Samples[:], cfg)
 					for _, transfer := range results.TX {
 						log.Printf(logging.StatLog(preamble)+"UART transfer over tx: t=%.0fus TX=0x%02X\n",
 							transfer.Timestamp+offset, transfer.Data)
+						fmt.Fprintf(tcpConnection, "ANN UART t=%.0f ch=1 data=0x%02X\n",
+							transfer.Timestamp+offset, transfer.Data)
 					}
+					for _, transfer := range results.RX {
+						fmt.Fprintf(tcpConnection, "ANN UART t=%.0f ch=2 data=0x%02X\n",
+							transfer.Timestamp+offset, transfer.Data)
+					}
+
 				case config.I2C:
-					offset := float64(packet.Seq) * 512.0
 					results := decoder.DecodeI2C(packet.Samples[:], cfg.Pins, offset)
 					for _, transfer := range results {
 						log.Printf(logging.StatLog(preamble)+"I2C addr=0x%02X rw=%v data=%X acks=%v err=%v t=%.0fus\n",
 							transfer.Addr, transfer.RW, transfer.Data, transfer.ACKs, transfer.Error, transfer.Timestamp)
+						fmt.Fprintf(tcpConnection, "ANN I2C t=%.0f ch=7 addr=0x%02X data=%X\n",
+							transfer.Timestamp, transfer.Addr, transfer.Data)
 					}
+
 				default:
 					log.Println("Protocol not found: " + string(cfg.Protocol))
 				}
-
 			case CAN_H1:
 				packet, err := parseCANPacket(raw)
 				if err != nil {
@@ -293,6 +307,7 @@ func Run(cfg *config.Config, tcpConnection net.Conn) error {
 				fmt.Fprintf(tcpConnection, "CAN seq=%d id=0x%X dlc=%d data=%X\n",
 					packet.Seq, packet.ID, packet.DLC, packet.Data)
 			}
+
 		case err := <-errorChan:
 			log.Println(logging.ErrLog(preamble) + err.Error())
 

@@ -271,10 +271,10 @@ func Run(cfg *config.Config, tcpConnection net.Conn) error {
 						fmt.Fprintf(tcpConnection, "ANN UART t=%.0f ch=1 data=0x%02X\n",
 							transfer.Timestamp+offset, transfer.Data)
 					}
-					for _, transfer := range results.RX {
-						fmt.Fprintf(tcpConnection, "ANN UART t=%.0f ch=2 data=0x%02X\n",
-							transfer.Timestamp+offset, transfer.Data)
-					}
+					// for _, transfer := range results.RX {
+					// 	fmt.Fprintf(tcpConnection, "ANN UART t=%.0f ch=2 data=0x%02X\n",
+					// 		transfer.Timestamp+offset, transfer.Data)
+					// }
 
 				case config.I2C:
 					results := decoder.DecodeI2C(packet.Samples[:], cfg.Pins, offset)

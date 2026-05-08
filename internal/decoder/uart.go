@@ -89,7 +89,7 @@ func DecodeUART(packet []byte, cfg *config.Config) *DecodedUARTPacket {
 				txSampleCounter = 0
 			}
 		case START_BIT:
-			if txHigh && txSampleCounter < 1 { // was halfway (=2), change to 1
+			if txHigh && txSampleCounter < halfway {
 				txState = IDLE
 			} else if txSampleCounter >= samplesPerBit {
 				txState = DATA_BITS
@@ -138,8 +138,8 @@ func DecodeUART(packet []byte, cfg *config.Config) *DecodedUARTPacket {
 				rxSampleCounter = 0
 			}
 		case START_BIT:
-			if rxHigh && rxSampleCounter < 1 { // was halfway (=2), change to 1
-				rxState = IDLE
+			if rxHigh && rxSampleCounter < halfway {
+				txState = IDLE
 			} else if rxSampleCounter >= samplesPerBit {
 				rxState = DATA_BITS
 				rxSampleCounter = 0

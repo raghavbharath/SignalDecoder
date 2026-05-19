@@ -1,46 +1,65 @@
-# Signal Decoder
+# SignalDecoder
 
-This is a signal decoder. Plan is that it'll be runnable as an executable, will monitor the port that you specify, and will decode incoming signals that *follow a certain bit-packed format*.
 
-This project is a smaller part of a larger [Logic Analyzer][01] project that our ECE692 (Embedded Systems @ NJIT) group is doing. We haven't yet decided upon a format, will update this readme when we do.
+**Collaborators:** Raghav Bharathan (https://github.com/raghavbharath), Arnav Revankar (https://github.com/avr34)
 
-## Plan
+The SignalDecoder is A Go-based serial packet decoder for the [ECE 692 USB Logic Analyzer][01] project at NJIT. Reads STM32 DMA-captured signal data over a serial port, decodes UART, SPI, I2C, and CAN protocols, and streams results to a Python PyQt6 GUI over TCP.
 
-Below is how the flow of data within this application will work:
+## Background
 
-- Data will come in from the STM via a COM port in a continuous stream.The packets will follow the format `[Header 0xAABB] [Sequence # (0 - 255)] [30 Pairs of [Channel State (1B)] [Duration (1B)]] [Checksum (XOR or all 63 previous bytes)]`. Each of the 30 pairs will follow run length encoding. If the channel state changes, there will be a new point (out of 30). If the channel state doesn't change, the duration is incremented. It keeps getting incremented till it reaches 255, at which point a new data point is forced.
-- The Go application will be invoked by the Python GUI (using something like a subprocess), with several command line options, including:
+This is one component of a larger logic analyzer project built for ECE 692 (Embedded Systems). The STM32F446RE receiver board captures up to 8 digital channels simultaneously via DMA and streams packets to this decoder over serial. SignalDecoder handles packet parsing, protocol decoding, and forwarding results to the GUI over TCP.
+
+## How It Works
+
+Below is how data flows through this application:
+
+- Data comes in from the STM32 via a serial port in a continuous stream. There are two packet types. Logic packets use header `0xAA 0xBB` and follow the format `[Header (2B)] [Sequence # (1B)] [512 samples (1B each)] [XOR checksum (1B)]` for a total of 516 bytes. Each sample byte encodes all 8 channels, where bit 0 = CH1 (PC0) through bit 7 = CH8 (PC7). CAN packets use header `0xCC 0xDD` and follow the format `[Header (2B)] [Sequence # (1B)] [ID_H] [ID_L] [DLC] [0-8 data bytes] [XOR checksum (1B)]` for a total of 7 to 15 bytes. CAN frames are pre-decoded by the STM32 bxCAN peripheral, so no raw CAN decoding happens here.
+- The Go application is invoked by the Python GUI as a subprocess with several command line flags:
     - Which port to listen on (COM or /dev/tty\*)
     - Duration that the Go program should run for (capture period)
-    - (Optional) Which signal decoding should be used (UART, I2C, SPI, or CAN)
-    - (Optional) Which pins to use for said decoding. Required if using the signal decoding.
-        - For UART: `--pins tx1rx2`
-        - For SPI: `--pins miso1mosi2clk3` or `miso1mosi2clk3cs4`
-        - For I2C: `--pins sda1scl2`
-        - For CAN: `--pins canh1canl2`
-        - where the numbers (1, 2, 3, ...) are the channel numbers.
-        - For now only decoding one signal at a time.
-    - Once the go program has run for the specified amount of time, it will exit by itself, and close the connection on the COM port and the socket.
-- Once the program is invoked, it will listen to the port and do the following *if decoding is involved*:
-    - Read one 64 byte input frame off the serial port's buffer, and parse it into a custom data format. This may be in `internal/serial/`.
-    - The parsed frame should then be sent to a goroutine which handles decoding. That goroutine should be initialized with the correct decoding settings (what protocol and which channels). This may be in `internal/decoder`
-    - Finally, the decoded frame (30 datapoints and values) must be sent in two packets (waveform and decoded packets) on a socket to communicate with the Python application.
-        - From here, the python application will read the decoded packet, plot the waveform, and place the text (hex bytes, decoded from the signal) onto the waveform at the correct places.
+    - (Optional) Which protocol to decode: UART, SPI, I2C, or CAN
+    - (Optional) Which channels to use for decoding (required if a protocol is specified):
+        - For UART: `--pins tx=1,rx=2`
+        - For SPI: `--pins miso=1,mosi=2,clk=3,cs=4`
+        - For I2C: `--pins sda=1,scl=2`
+        - For CAN: hardware-decoded on the STM32, no pin assignment needed
+        - Where the numbers are the channel numbers (1 through 8)
+        - Only one protocol can be decoded at a time
+    - Once the Go program has run for the specified duration, it exits on its own and closes both the serial port and the TCP socket.
+- Once invoked, the program listens to the port and does the following if decoding is enabled:
+    - Reads incoming bytes off the serial port, syncs to a packet header (`0xAA 0xBB` or `0xCC 0xDD`), validates the XOR checksum, and parses the packet into an internal data format. This lives in `internal/serial/`.
+    - The parsed packet is then passed to a goroutine that handles decoding, initialized with the correct protocol and channel settings. This lives in `internal/decoder/`.
+    - The decoded output is then sent over a TCP socket to the Python GUI, which plots the waveform and overlays the decoded values (hex bytes, protocol fields) at the correct positions.
 
-## Proposed Project Structure:
+## Project Structure
 
 ```
-logic-analyzer-go/
-├── main.go             # Entry point: Orchestrates goroutines and channels
+SignalDecoder/
+├── main.go                 # Entry point, orchestrates goroutines and channels
 ├── internal/
-│   ├── serial/         # Handles bugst/go-serial and packet framing
-│   ├── decoder/        # RLE expansion and protocol decoding (UART/SPI) 
-│   ├── transport/      # Socket server to talk to Python
-│   ├── config/         # Holds configuration struct for the entire runtime of the program 
-│   └── logging/        # Small logging package, to easily color text either red or green.
+│   ├── serial/             # Serial port reading, packet sync, and framing
+│   ├── decoder/            # Protocol decoding (UART, SPI, I2C, CAN)
+│   ├── transport/          # TCP socket server to the Python GUI
+│   └── config/             # Runtime configuration struct
 ├── go.mod
 └── go.sum
-``` 
+```
+
+## Packet Protocol Reference
+
+| Type  | Header      | Format                                                       | Size       |
+|-------|-------------|--------------------------------------------------------------|------------|
+| Logic | `0xAA 0xBB` | `[seq (1B)][512 samples (1B each)][XOR checksum]`            | 516 bytes  |
+| CAN   | `0xCC 0xDD` | `[seq (1B)][ID_H][ID_L][DLC][0-8 data bytes][XOR checksum]` | 7-15 bytes |
+
+## Throughput Notes
+
+- **USB CDC path**: 1MHz sample rate, the intended path for SPI and I2C decoding.
+- **ST-Link USART path**: Practical ceiling of around 10kHz at 115200 baud. Only usable for UART at low baud rates.
+
+## Credits
+
+Raghav Bharathan and Arnav Revankar, as part of the ECE 692 USB Logic Analyzer project at NJIT.
 
 <!-- Links -->
 [01]: https://github.com/ragusauce4357/ECE692-Final-Project

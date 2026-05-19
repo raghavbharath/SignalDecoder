@@ -1,7 +1,7 @@
 # SignalDecoder
 
 
-**Collaborators:** Raghav Bharathan (https://github.com/raghavbharath), Arnav Revankar (https://github.com/avr34)
+**Collaborators:** [Raghav Bharathan (raghavbharath)](https://github.com/raghavbharath), [Arnav Revankar (avr34)](https://github.com/avr34)
 
 The SignalDecoder is A Go-based serial packet decoder for the [ECE 692 USB Logic Analyzer][01] project at NJIT. Reads STM32 DMA-captured signal data over a serial port, decodes UART, SPI, I2C, and CAN protocols, and streams results to a Python PyQt6 GUI over TCP.
 
